@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RANI AI HUD</title>
+<style>
+  :root{--c:#00e5ff;--b:#2979ff;--bg:rgba(4,14,30,.58)}
+  html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none;
+    font-family:"Segoe UI",system-ui,sans-serif;color:#d9f6ff}
+  canvas{position:absolute;inset:0;width:100%;height:100%}
+  #panel{position:absolute;left:14px;right:14px;bottom:12px;padding:9px 12px 10px;border-radius:14px;
+    background:var(--bg);border:1px solid rgba(0,229,255,.35);box-shadow:0 0 18px rgba(0,229,255,.18) inset,0 0 14px rgba(41,121,255,.25);
+    transition:opacity .25s}
+  #label{font-size:11px;letter-spacing:.28em;color:var(--c);text-shadow:0 0 8px var(--c);margin-bottom:4px;text-transform:uppercase}
+  #user{font-size:12px;opacity:.7;min-height:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #reply{font-size:14px;line-height:1.35;margin-top:3px;max-height:76px;overflow:hidden;text-shadow:0 0 6px rgba(0,229,255,.35)}
+  #task{font-size:11px;color:#9fe8ff;margin-top:4px;min-height:13px}
+  #btns{position:absolute;top:8px;right:8px;display:flex;gap:6px;opacity:0;transition:opacity .2s}
+  body:hover #btns{opacity:.95}
+  .b{width:26px;height:26px;border-radius:50%;border:1px solid rgba(0,229,255,.55);background:rgba(4,14,30,.7);
+    color:var(--c);font-size:13px;line-height:24px;text-align:center;cursor:pointer;box-shadow:0 0 8px rgba(0,229,255,.3)}
+  .b:hover{background:rgba(0,229,255,.25)}
+  body.compact #panel{display:none}
+  body.err{--c:#ff5252;--bg:rgba(40,6,10,.62)}
+</style></head>
+<body>
+<canvas id="cv"></canvas>
+<div id="btns">
+  <div class="b" id="bMic" title="Talk (Ctrl+Alt+Space)">🎤</div>
+  <div class="b" id="bStop" title="Emergency stop">■</div>
+  <div class="b" id="bCmp" title="Compact / full">⤢</div>
+  <div class="b" id="bSet" title="Settings">⚙</div>
+</div>
+<div id="panel">
+  <div id="label">IDLE</div><div id="user"></div><div id="reply"></div><div id="task"></div>
+</div>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script>
+"use strict";
+const cv=document.getElementById('cv'),g=cv.getContext('2d');
+const P=new URLSearchParams(location.search);
+const demo=P.get('demo');                        // ?demo=listening  -> drive the animation without Python
+let bridge=null, snap={state:'idle',label:'',user:'',reply:'',task:'',progress:0,level:0,error:'',compact:false};
+let W=380,H=440,DPR=1;
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);W=innerWidth;H=innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;g.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);resize();
+
+// ---- smoothed visual parameters (eased toward per-state targets)
+const V={energy:0,spin:1,scan:0,listen:0,speak:0,exec:0,err:0,hue:0,prog:0,pulse:0};
+const TARGET={
+ idle:     {spin:.6, scan:0, listen:0, speak:0, exec:0, err:0},
+ listening:{spin:1.2,scan:0, listen:1, speak:0, exec:0, err:0},
+ thinking: {spin:4.2,scan:1, listen:0, speak:0, exec:0, err:0},
+ speaking: {spin:1.4,scan:0, listen:0, speak:1, exec:0, err:0},
+ executing:{spin:2.2,scan:.4,listen:0, speak:0, exec:1, err:0},
+ error:    {spin:.9, scan:0, listen:0, speak:0, exec:0, err:1}};
+const LABEL={idle:'RANI AI · READY',listening:'LISTENING',thinking:'THINKING',speaking:'SPEAKING',executing:'EXECUTING',error:'ERROR'};
+const ease=(a,b,k)=>a+(b-a)*k;
+const P_N=70, parts=Array.from({length:P_N},(_,i)=>({a:Math.random()*6.283,r:.35+Math.random()*.85,s:(Math.random()*.6+.2)*(Math.random()<.5?-1:1),z:Math.random()}));
+const ripples=[]; let lastRip=0, rot=0, t0=performance.now(), lastF=0;
+
+function col(a,l=60){ // cyan<->red by error amount
+  const h=ease(188,4,V.err), s=100; return `hsla(${h},${s}%,${l}%,${a})`}
+
+function frame(now){
+  requestAnimationFrame(frame);
+  const idleCompact=snap.compact&&snap.state==='idle';
+  if(idleCompact && now-lastF<33) return;           // ~30fps when tiny+idle: saves CPU/GPU
+  lastF=now;
+  const dt=Math.min(.05,(now-t0)/1000); t0=now; const t=now/1000;
+  const T=TARGET[snap.state]||TARGET.idle, k=1-Math.pow(.001,dt);   // ~frame-rate independent easing
+  for(const key of ['spin','scan','listen','speak','exec','err']) V[key]=ease(V[key],T[key],k*1.6);
+  V.energy=ease(V.energy,Math.max(0,Math.min(1,snap.level||0)),k*5);
+  V.prog=ease(V.prog,snap.progress||0,k*3);
+  rot+=dt*V.spin;
+
+  g.clearRect(0,0,W,H);
+  const compact=snap.compact, scale=compact?Math.min(W,H)/340:Math.min(1,W/380);
+  const cx=W/2, cy=compact?H/2:Math.min(H-135,190)*Math.max(.9,scale)*.92;
+  const jitter=V.err>.2?Math.sin(t*60)*2*V.err:0;
+  g.save();g.translate(cx+jitter,cy);g.scale(scale,scale);
+  const R=62*(1+.1*V.energy*V.speak+.025*Math.sin(t*1.6));       // orb radius (breathes, pulses with voice)
+
+  g.globalCompositeOperation='lighter';
+  // ambient glow
+  let gr=g.createRadialGradient(0,0,R*.4,0,0,R*3);
+  gr.addColorStop(0,col(.35+.25*V.energy,55));gr.addColorStop(.5,col(.08,45));gr.addColorStop(1,col(0,40));
+  g.fillStyle=gr;g.beginPath();g.arc(0,0,R*3,0,6.283);g.fill();
+
+  // outer tick ring (HUD scale)
+  g.lineWidth=1.2;g.strokeStyle=col(.55,62);
+  const rt=R+88;
+  for(let i=0;i<90;i++){const a=i/90*6.283+rot*.12, long=i%6===0, l=long?9:4.5;
+    g.beginPath();g.moveTo(Math.cos(a)*rt,Math.sin(a)*rt);g.lineTo(Math.cos(a)*(rt-l),Math.sin(a)*(rt-l));g.stroke();}
+  // segmented rings rotating at different speeds
+  ring(R+68,[14,10],rot*.9,1.6,.75);
+  ring(R+52,[3,7],-rot*1.4,1.2,.55);
+  arcs(R+38,3,rot*1.9,2.2,.85);
+  arcs(R+24,5,-rot*2.6,1.4,.5);
+
+  // listening: reactive radial mic waves
+  if(V.listen>.02){
+    const n=72;g.lineWidth=2.2;
+    for(let i=0;i<n;i++){const a=i/n*6.283, w=.5+.5*Math.sin(a*5+t*7)*Math.sin(a*3-t*4);
+      const len=(4+V.energy*38*w+6*Math.random()*V.energy)*V.listen;
+      g.strokeStyle=col(.4+.5*V.energy,60);g.beginPath();
+      g.moveTo(Math.cos(a)*(R+8),Math.sin(a)*(R+8));g.lineTo(Math.cos(a)*(R+8+len),Math.sin(a)*(R+8+len));g.stroke();}
+  }
+  // thinking: scanning sweep + fast arcs
+  if(V.scan>.02){
+    const a0=rot*1.3; g.save();g.rotate(a0);
+    const sw=g.createConicGradient?g.createConicGradient(0,0,0):null;
+    if(sw){sw.addColorStop(0,col(.0));sw.addColorStop(.88,col(0));sw.addColorStop(1,col(.55*V.scan,65));
+      g.fillStyle=sw;g.beginPath();g.arc(0,0,R+60,0,6.283);g.arc(0,0,R+8,6.283,0,true);g.fill();}
+    g.restore();
+    g.strokeStyle=col(.9*V.scan,70);g.lineWidth=2;g.beginPath();g.moveTo(Math.cos(a0)*(R+8),Math.sin(a0)*(R+8));g.lineTo(Math.cos(a0)*(R+62),Math.sin(a0)*(R+62));g.stroke();
+  }
+  // speaking: ripples synced with the voice pulse
+  if(V.speak>.1&&t-lastRip>.32-.18*V.energy){ripples.push({r:R,a:.55*V.energy+.2});lastRip=t}
+  for(let i=ripples.length-1;i>=0;i--){const p=ripples[i];p.r+=dt*95;p.a-=dt*.5;
+    if(p.a<=0){ripples.splice(i,1);continue}
+    g.strokeStyle=col(p.a,65);g.lineWidth=2;g.beginPath();g.arc(0,0,p.r,0,6.283);g.stroke();}
+  // executing: progress arc
+  if(V.exec>.02){
+    g.lineWidth=5;g.strokeStyle=col(.2*V.exec,50);g.beginPath();g.arc(0,0,R+104,0,6.283);g.stroke();
+    g.strokeStyle=col(.95*V.exec,65);g.lineCap='round';g.beginPath();
+    const prog=Math.max(.04,V.prog);g.arc(0,0,R+104,-1.5708,-1.5708+6.283*prog);g.stroke();g.lineCap='butt';
+  }
+  // particles
+  for(const p of parts){const a=p.a+rot*p.s*.6, rr=R*(.5+p.r*(1+.7*V.energy)), x=Math.cos(a)*rr, y=Math.sin(a)*rr*.82;
+    g.fillStyle=col(.25+.55*p.z,75);const s=.8+p.z*1.8;g.fillRect(x-s/2,y-s/2,s,s);}
+
+  // the holographic orb
+  g.globalCompositeOperation='source-over';
+  gr=g.createRadialGradient(-R*.25,-R*.3,R*.08,0,0,R);
+  gr.addColorStop(0,col(.95,88));gr.addColorStop(.35,col(.75,55));gr.addColorStop(.75,`hsla(${ease(222,350,V.err)},90%,35%,.7)`);gr.addColorStop(1,col(.25,30));
+  g.fillStyle=gr;g.beginPath();g.arc(0,0,R,0,6.283);g.fill();
+  g.save();g.beginPath();g.arc(0,0,R,0,6.283);g.clip();g.globalCompositeOperation='lighter';
+  for(let i=0;i<5;i++){ // swirling bands inside the orb
+    g.save();g.rotate(rot*(.5+i*.25)*(i%2?-1:1)+i);g.scale(1,.28+.1*i);
+    g.strokeStyle=col(.2+.12*V.energy,70);g.lineWidth=3+i;g.beginPath();g.arc(0,0,R*(.55+.1*i),0,4.4);g.stroke();g.restore();}
+  g.restore();
+  g.strokeStyle=col(.9,75);g.lineWidth=1.6;g.beginPath();g.arc(0,0,R,0,6.283);g.stroke();
+  g.restore();
+}
+function ring(r,dash,off,w,a){g.save();g.setLineDash(dash);g.lineDashOffset=-off*20;g.lineWidth=w;g.strokeStyle=col(a,60);g.beginPath();g.arc(0,0,r,0,6.283);g.stroke();g.restore()}
+function arcs(r,n,off,w,a){g.lineWidth=w;g.strokeStyle=col(a,64);for(let i=0;i<n;i++){const s=off+i*6.283/n;g.beginPath();g.arc(0,0,r,s,s+6.283/n*.55);g.stroke()}}
+
+// ---- DOM text
+const $=id=>document.getElementById(id);
+function paint(){
+  document.body.classList.toggle('compact',!!snap.compact);document.body.classList.toggle('err',snap.state==='error');
+  $('label').textContent=snap.label||LABEL[snap.state]||'READY';
+  $('user').textContent=snap.user?('› '+snap.user):'';
+  $('reply').textContent=snap.reply||'';
+  $('task').textContent=snap.state==='error'?(snap.error||''):(snap.task||'');
+}
+// ---- data feed
+let busy=false;
+function poll(){
+  if(!bridge||busy)return;busy=true;
+  bridge.snapshot(s=>{try{snap=JSON.parse(s);paint()}catch(e){}busy=false});
+}
+if(demo){ // standalone preview (no Python): ?demo=speaking etc.
+  snap={state:demo,label:'',user:'Chrome kholo',reply:'Jee Wali, abhi Chrome open karti hoon.',task:demo==='executing'?'open app':'',progress:.62,level:.6,error:'Microphone nahi mila',compact:P.get('compact')==='1'};
+  paint();
+  setInterval(()=>{snap.level=.5+.4*Math.sin(performance.now()/130)*Math.sin(performance.now()/410)},40);
+}else if(window.QWebChannel&&window.qt){
+  new QWebChannel(qt.webChannelTransport,ch=>{bridge=ch.objects.bridge;setInterval(poll,50);
+    $('bMic').onclick=()=>bridge.ptt();$('bStop').onclick=()=>bridge.stop();
+    $('bCmp').onclick=()=>bridge.toggle_compact();$('bSet').onclick=()=>bridge.open_settings();
+    cv.ondblclick=()=>bridge.toggle_compact();cv.onclick=()=>bridge.ptt();});
+}
+requestAnimationFrame(frame);
+</script></body></html>

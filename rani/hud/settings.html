@@ -1,0 +1,122 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RANI AI Settings</title>
+<style>
+:root{--c:#00e5ff;--bg:#06101f;--card:#0b1a30;--line:#16365a;--tx:#d9f6ff;--mut:#7fa7c0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px "Segoe UI",system-ui,sans-serif;display:flex;height:100vh}
+nav{width:180px;background:#040b16;border-right:1px solid var(--line);padding:14px 0}
+nav h1{font-size:15px;color:var(--c);letter-spacing:.2em;margin:0 16px 14px;text-shadow:0 0 8px var(--c)}
+nav a{display:block;padding:9px 18px;color:var(--mut);cursor:pointer;border-left:3px solid transparent}
+nav a.on{color:var(--c);border-left-color:var(--c);background:#0a1a2e}
+main{flex:1;overflow:auto;padding:22px 28px}section{display:none;max-width:760px}section.on{display:block}
+h2{margin:0 0 14px;font-weight:600;font-size:18px}
+.row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #0f2744}
+.row>label{flex:1}.hint{color:var(--mut);font-size:12px;display:block;margin-top:2px}
+input[type=text],input[type=password],input[type=number],select,textarea{background:var(--card);border:1px solid var(--line);color:var(--tx);padding:6px 8px;border-radius:6px;min-width:200px}
+textarea{width:100%;min-height:60px}
+button{background:#0d2a4a;border:1px solid #1f5a96;color:var(--c);padding:6px 12px;border-radius:6px;cursor:pointer}
+button:hover{background:#12406e}button.danger{border-color:#8a2b2b;color:#ff8a8a}
+table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:5px 6px;border-bottom:1px solid #0f2744;text-align:left}
+.ok{color:#5df29a}.bad{color:#ff7a7a}.pill{padding:1px 8px;border-radius:10px;background:#0d2a4a;font-size:11px}
+#toast{position:fixed;right:18px;bottom:16px;background:#0d2a4a;border:1px solid var(--c);padding:8px 14px;border-radius:8px;opacity:0;transition:.3s}
+</style></head><body>
+<nav><h1>RANI AI</h1>
+ <a data-t="general" class="on">General</a><a data-t="voice">Voice</a><a data-t="brain">AI Brain</a>
+ <a data-t="memory">Memory</a><a data-t="perm">Permissions</a><a data-t="hist">History</a><a data-t="diag">Diagnostics</a></nav>
+<main>
+<section id="general" class="on"><h2>General</h2>
+ <div class="row"><label>Start RANI when Windows starts<span class="hint">Per-user, no administrator needed</span></label><input type="checkbox" id="autostart"></div>
+ <div class="row"><label>Speak the welcome greeting (once per login)</label><input type="checkbox" id="greeting_enabled"></div>
+ <div class="row"><label>Welcome message</label><select id="greeting_id"><option value="default">Full Urdu greeting</option><option value="short">Short Urdu greeting</option><option value="english">English greeting</option><option value="custom">Custom</option></select></div>
+ <div class="row" id="customRow"><label>Custom message<span class="hint">Write it in Urdu script for the best pronunciation</span><textarea id="greeting_custom"></textarea></label></div>
+ <div class="row"><label>Greeting volume</label><input type="range" id="greeting_volume" min="0" max="1" step="0.05"></div>
+ <div class="row"><label>Startup delay (seconds)<span class="hint">Wait after login before RANI talks</span></label><input type="number" id="startup_delay_sec" min="0" max="120"></div>
+ <div class="row"><label>Start as the small floating orb</label><input type="checkbox" id="start_compact"></div>
+ <div class="row"><label>Listening mode<span class="hint">push = Ctrl+Alt+Space / click orb. wake = say "RANI" (listens continuously; audio goes to Google speech recognition)</span></label>
+  <select id="listen_mode"><option value="push">Push-to-talk</option><option value="wake">Wake word "RANI"</option><option value="off">Off</option></select></div>
+ <div class="row"><label>Shutdown/restart countdown (seconds)<span class="hint">You can say "cancel shutdown" during it</span></label><input type="number" id="shutdown_grace_sec" min="5" max="600"></div>
+ <div class="row"><label>Ask before sleep</label><input type="checkbox" id="confirm_sleep"></div>
+ <div class="row"><button id="saveGeneral">Save</button><button id="testGreeting">Test greeting</button></div></section>
+
+<section id="voice"><h2>Voice</h2>
+ <div class="row"><label>Urdu voice</label><select id="voice_ur"></select></div>
+ <div class="row"><label>English voice</label><select id="voice_en"></select></div>
+ <div class="row"><label>Speaking speed (%)</label><input type="range" id="speech_rate" min="-40" max="40" step="5"></div>
+ <div class="row"><label>Speaking volume</label><input type="range" id="volume" min="0" max="1" step="0.05"></div>
+ <div class="row"><button id="saveVoice">Save</button><button id="testUr">Test Urdu</button><button id="testEn">Test English</button><span id="voiceNote" class="hint"></span></div></section>
+
+<section id="brain"><h2>AI Brain</h2>
+ <p class="hint">Order: Gemini &rarr; Grok &rarr; Groq &rarr; OpenRouter &rarr; your own cloud &rarr; <b>Ollama (offline, always last)</b>. When one hits its limit or the internet is off, RANI moves to the next automatically. Keys are stored in Windows Credential Manager and are never shown again.</p>
+ <div class="row"><label>Gemini API key <span id="pill_GEMINI_API_KEY" class="pill"></span><span class="hint">aistudio.google.com/apikey (free)</span></label><input type="password" id="k_GEMINI_API_KEY" placeholder="paste key"><button data-key="GEMINI_API_KEY" class="sk">Save</button></div>
+ <div class="row"><label>Gemini model</label><input type="text" id="gemini_model"></div>
+ <div class="row"><label>Grok (xAI) API key <span id="pill_XAI_API_KEY" class="pill"></span><span class="hint">console.x.ai</span></label><input type="password" id="k_XAI_API_KEY" placeholder="paste key"><button data-key="XAI_API_KEY" class="sk">Save</button></div>
+ <div class="row"><label>Grok model</label><input type="text" id="grok_model"></div>
+ <div class="row"><label>Groq API key <span id="pill_GROQ_API_KEY" class="pill"></span><span class="hint">console.groq.com (free tier)</span></label><input type="password" id="k_GROQ_API_KEY" placeholder="paste key"><button data-key="GROQ_API_KEY" class="sk">Save</button></div>
+ <div class="row"><label>Groq model</label><input type="text" id="groq_model"></div>
+ <div class="row"><label>OpenRouter API key <span id="pill_OPENROUTER_API_KEY" class="pill"></span><span class="hint">openrouter.ai (has free models)</span></label><input type="password" id="k_OPENROUTER_API_KEY" placeholder="paste key"><button data-key="OPENROUTER_API_KEY" class="sk">Save</button></div>
+ <div class="row"><label>OpenRouter model</label><input type="text" id="openrouter_model"></div>
+ <div class="row"><label>Your own cloud: base URL (OpenAI-compatible)</label><input type="text" id="openai_base_url" placeholder="https://.../v1"></div>
+ <div class="row"><label>Your own cloud: model</label><input type="text" id="openai_model"></div>
+ <div class="row"><label>Your own cloud: API key <span id="pill_OPENAI_COMPAT_API_KEY" class="pill"></span></label><input type="password" id="k_OPENAI_COMPAT_API_KEY" placeholder="paste key"><button data-key="OPENAI_COMPAT_API_KEY" class="sk">Save</button></div>
+ <div class="row"><label>Offline model (Ollama)<span class="hint">Used when every cloud AI is out of limit or the internet is off. 3B-7B models suit a 6 GB GPU.</span></label><input type="text" id="ollama_model"></div>
+ <div class="row"><label>Ollama URL</label><input type="text" id="ollama_url"></div>
+ <div class="row"><label>Provider order<span class="hint">Comma separated: gemini, grok, groq, openrouter, openai_compat, ollama</span></label><input type="text" id="providers_order"></div>
+ <div class="row"><button id="saveBrain">Save</button><button id="testAI">Test AI connection</button><span id="aiNote" class="hint"></span></div></section>
+
+<section id="memory"><h2>Memory</h2><p class="hint">Only things you asked me to remember, or approved, are stored here.</p>
+ <div class="row"><input type="text" id="newMem" style="flex:1" placeholder="e.g. Wali likes short answers"><button id="addMem">Add</button></div>
+ <table id="memTable"></table></section>
+
+<section id="perm"><h2>Permissions</h2>
+ <p class="hint">allow = RANI just does it · ask = RANI asks "haan/nahi" first · deny = blocked. Shutdown, restart, lid-close changes, rename/move always ask regardless.</p>
+ <table id="permTable"></table><div class="row"><button id="savePerm">Save permissions</button></div></section>
+
+<section id="hist"><h2>Action history</h2><div class="row"><button id="refHist">Refresh</button><button class="danger" id="clrHist">Clear</button></div><table id="histTable"></table></section>
+<section id="diag"><h2>Diagnostics</h2><div class="row"><button id="runDiag">Run checks</button></div><table id="diagTable"></table></section>
+</main><div id="toast"></div>
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script>
+"use strict";
+let B=null,S={};const $=i=>document.getElementById(i);
+const call=(m,...a)=>new Promise(r=>B[m](...a,v=>{try{r(JSON.parse(v))}catch(e){r(v)}}));
+const toast=t=>{const e=$('toast');e.textContent=t;e.style.opacity=1;setTimeout(()=>e.style.opacity=0,2200)};
+document.querySelectorAll('nav a').forEach(a=>a.onclick=()=>{document.querySelectorAll('nav a,section').forEach(x=>x.classList.remove('on'));a.classList.add('on');$(a.dataset.t).classList.add('on');
+  ({memory:loadMem,hist:loadHist,voice:loadVoices})[a.dataset.t]?.()});
+const FIELDS={general:['greeting_enabled','greeting_id','greeting_custom','greeting_volume','startup_delay_sec','start_compact','listen_mode','shutdown_grace_sec','confirm_sleep'],
+ voice:['voice_ur','voice_en','speech_rate','volume'],brain:['gemini_model','grok_model','groq_model','openrouter_model','ollama_model','ollama_url','openai_base_url','openai_model']};
+function fill(){for(const f of Object.values(FIELDS).flat()){const e=$(f);if(!e)continue;const v=S.settings[f];if(e.type==='checkbox')e.checked=!!v;else e.value=v}
+ $('autostart').checked=S.autostart;$('providers_order').value=S.settings.providers_order.join(', ');
+ for(const n of ['GEMINI_API_KEY','XAI_API_KEY','GROQ_API_KEY','OPENROUTER_API_KEY','OPENAI_COMPAT_API_KEY'])$('pill_'+n).textContent=(S.has_keys||{})[n]?'saved ✓':'not set';toggleCustom();buildPerm()}
+const toggleCustom=()=>$('customRow').style.display=$('greeting_id').value==='custom'?'flex':'none';
+$('greeting_id').onchange=toggleCustom;
+function collect(keys){const o={};for(const f of keys){const e=$(f);o[f]=e.type==='checkbox'?e.checked:(e.type==='number'||e.type==='range')?Number(e.value):e.value}return o}
+async function save(keys,extra={}){const r=await call('save_settings',JSON.stringify({...collect(keys),...extra}));toast(r.ok?'Saved':'Error: '+r.error);await load()}
+$('saveGeneral').onclick=async()=>{const r=await call('set_autostart',$('autostart').checked);if(!r.ok)toast('Autostart: '+r.error);save(FIELDS.general)};
+$('testGreeting').onclick=()=>call('test_greeting');
+$('saveVoice').onclick=()=>save(FIELDS.voice);
+$('testUr').onclick=()=>call('test_voice','ur');$('testEn').onclick=()=>call('test_voice','en');
+$('saveBrain').onclick=()=>save(FIELDS.brain,{providers_order:$('providers_order').value.split(',').map(s=>s.trim()).filter(Boolean)});
+document.querySelectorAll('.sk').forEach(b=>b.onclick=async()=>{const inp=$('k_'+b.dataset.key);
+  const r=await call('set_secret',b.dataset.key,inp.value);inp.value='';toast(r.ok?'Key stored in Credential Manager':'Could not store key: '+r.error);load()});
+$('testAI').onclick=async()=>{$('aiNote').textContent='testing…';const r=await call('test_ai');$('aiNote').textContent=r.ok?('✓ replied via '+r.provider+': '+r.reply):('✗ '+r.error)};
+async function loadVoices(){const v=await call('list_voices');const fill=(id,pre,cur)=>{const s=$(id);s.innerHTML='';
+  const list=v.filter(x=>pre.some(p=>x.locale.startsWith(p)));const names=new Set(list.map(x=>x.name));if(!names.has(cur))list.unshift({name:cur,gender:'?',locale:''});
+  list.forEach(x=>{const o=document.createElement('option');o.value=x.name;o.textContent=`${x.name} (${x.gender})`;s.appendChild(o)});s.value=cur};
+  fill('voice_ur',['ur-'],S.settings.voice_ur);fill('voice_en',['en-'],S.settings.voice_en);
+  $('voiceNote').textContent=v.length?'':'Voice list needs internet; showing current voice only.'}
+async function loadMem(){const m=await call('memories');const t=$('memTable');t.innerHTML='<tr><th>Saved memory</th><th></th></tr>';
+ m.forEach(x=>{const r=t.insertRow();const i=document.createElement('input');i.type='text';i.value=x.text;i.style.width='100%';r.insertCell().appendChild(i);
+  const c=r.insertCell();const s=document.createElement('button');s.textContent='Save';s.onclick=async()=>{await call('update_memory',x.id,i.value);toast('Updated')};
+  const d=document.createElement('button');d.textContent='Delete';d.className='danger';d.onclick=async()=>{await call('delete_memory',x.id);loadMem()};c.append(s,' ',d)});
+ if(!m.length)t.insertRow().insertCell().textContent='Nothing saved yet.'}
+$('addMem').onclick=async()=>{if($('newMem').value.trim()){await call('add_memory',$('newMem').value);$('newMem').value='';loadMem()}};
+function buildPerm(){const t=$('permTable');t.innerHTML='<tr><th>Category</th><th>Policy</th></tr>';
+ Object.entries(S.settings.permissions).forEach(([k,v])=>{const r=t.insertRow();r.insertCell().textContent=k;const s=document.createElement('select');s.dataset.k=k;
+  ['allow','ask','deny'].forEach(o=>{const op=document.createElement('option');op.value=op.textContent=o;s.appendChild(op)});s.value=v;r.insertCell().appendChild(s)})}
+$('savePerm').onclick=()=>{const p={};document.querySelectorAll('#permTable select').forEach(s=>p[s.dataset.k]=s.value);save([],{permissions:p})};
+async function loadHist(){const h=await call('history');const t=$('histTable');t.innerHTML='<tr><th>Time</th><th>Action</th><th>Args</th><th>Source</th><th>Result</th></tr>';
+ h.forEach(x=>{const r=t.insertRow();[new Date(x.ts*1000).toLocaleTimeString(),x.action,x.args,x.source,(x.ok?'✓ ':'✗ ')+(x.verified===1?'verified ':x.verified===0?'NOT verified ':'')+(x.detail||'')].forEach(v=>r.insertCell().textContent=v)})}
+$('refHist').onclick=loadHist;$('clrHist').onclick=async()=>{await call('clear_history');loadHist()};
+$('runDiag').onclick=async()=>{const d=await call('diagnostics');const t=$('diagTable');t.innerHTML='';
+ d.forEach(x=>{const r=t.insertRow();r.insertCell().textContent=x.name;const c=r.insertCell();c.textContent=(x.ok?'✓ ':'✗ ')+x.detail;c.className=x.ok?'ok':'bad'})};
+async function load(){S=await call('get_settings');fill()}
+new QWebChannel(qt.webChannelTransport,ch=>{B=ch.objects.bridge;load()});
+</script></body></html>

@@ -1,0 +1,2 @@
+-r requirements-rani.txt
+pytest>=8.0
